@@ -1,7 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import Neuralnetwork as nn # Assuming your classes are in Neuralnetwork.py
+import Neuralnetwork as nn 
 # Try to import MNIST from Keras datasets
+
+
+"""
+also done with gemini but the api was done by me 
+to flatten inputs use .flatten from numpy implementing seemed unecessary given that it is so easy to flatten with numpy
+"""
 try:
     from tensorflow.keras.datasets import mnist
 except ImportError:
