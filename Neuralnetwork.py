@@ -1,9 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-# If you have Neuralnetwork.py, you'd typically import it like:
+# If you have Neuralnetwork.py, you would typically import it like:
 # import Neuralnetwork as nn
 
-# --- Neural Network Core Classes (full code for context) ---
 
 """layer_dense class"""
 class Layer_Dense:
@@ -184,6 +183,8 @@ class optimizer_Adam:
     def post_update(self):
         self.iterations += 1
 
+
+
 """Sequential Model Class"""
 class Sequential:
     optimizers = {
@@ -200,7 +201,7 @@ class Sequential:
         self.layers = layers
         self.loss = None
         self.optimizer = None
-        self.metrics = None # `metrics` is a list, currently used for nothing.
+        self.metrics = None #  currently used for nothing lol
 
     def compile_net(self, optimizer, loss, metrics: list = None, learning_rate=1.0):
         if loss == 'softmax_cce':
@@ -222,8 +223,9 @@ class Sequential:
 
         for epoch in range(epochs):
             self.loss_avg = 0.0
-            correct_predictions_epoch = 0 # Added for accuracy
-            total_samples_epoch = 0       # Added for accuracy
+            """these are for accuracy"""
+            correct_predictions_epoch = 0
+            total_samples_epoch = 0      
             batch_count_this_epoch = 0 
             batches_generator = self._create_batches(input_data, output_data,
                                                       batch_size=batch_size,
@@ -238,8 +240,8 @@ class Sequential:
                 self.loss_avg += batch_loss
                 
                 batch_count_this_epoch+=1
-                # 3. Calculate Training Accuracy for the batch (if applicable)
-                # This logic assumes classification problems where y_pred_batch are probabilities/logits
+          
+                # This logic assumes classification problems where y_pred_batch are probabilities
                 # and y_true_batch are one-hot or sparse labels.
                 if hasattr(self.loss, 'activation') and isinstance(self.loss.activation, Activation_Softmax):
                     # For classification, we use argmax on the predictions
@@ -258,12 +260,13 @@ class Sequential:
                 # 4. Backward Pass & Optimizer Update
                 self._backward(y_true_batch)
             
-            # Print epoch summary
-            if batch_count_this_epoch > 0: # Check if any batches were processed
+            
+            if batch_count_this_epoch > 0: # Check if batches were processed
                 epoch_loss_avg = self.loss_avg / batch_count_this_epoch
                 log_string = f"Epoch {epoch + 1}/{epochs} - Avg Loss: {epoch_loss_avg:.6f}"
                 
-                if total_samples_epoch > 0: # Only add accuracy if it was calculated
+                if total_samples_epoch > 0: 
+                    """only if it was calculated would it enter here"""
                     epoch_accuracy = correct_predictions_epoch / total_samples_epoch
                     log_string += f", Train Accuracy: {epoch_accuracy:.4f}"
                 print(log_string)
@@ -288,22 +291,22 @@ class Sequential:
             print(f"Evaluation Loss: {final_loss:.6f}, Evaluation Accuracy: {accuracy:.4f}")
         else:
             print(f"Evaluation Loss: {final_loss:.6f}")
-        return final_loss, accuracy # Return both for potential use
+        return final_loss, accuracy
 
     def predict(self, input_data):
         return self._forward(input_data)
     
-    def get_loss(self, input_data, output_data):
-        print("Use .evaluate(input_data, output_data) for model loss calculation and metrics.")
-        return self.evaluate(input_data, output_data)
+
 
     def _forward(self, input_data):
+        """forward pass"""
         current_output = input_data
         for layer in self.layers:
             current_output = layer.forward(current_output)
         return current_output
 
     def _backward(self, y_true_batch):
+        """ this just does the backward pass"""
         self.loss.backward(self.loss.output, y_true_batch)
         self.optimizer.pre_update()
         current_dvalues = self.loss.dinputs
@@ -335,7 +338,9 @@ class Sequential:
 # --- Main Execution / Training Script ---
 
 if __name__ == "__main__":
-    """gemini test client"""
+    """gemini test client
+    i was too lazy to do it my self but it is in my notebook file where i did it with a rough draft of the api
+    """
     # Define the range for training (e.g., 0 to 4*pi for 2 full cycles)
     # This is crucial for the network to generalize beyond a single cycle.
     train_range_start = 0
@@ -367,7 +372,7 @@ if __name__ == "__main__":
 
     # Model Training
     print("\n--- Training Model ---")
-    model.fit(time_train_scaled, sine_wave_train, epochs=2000, batch_size=32, shuffle_batch=True) # Increased epochs significantly
+    model.fit(time_train_scaled, sine_wave_train, epochs=20, batch_size=1) # Increased epochs significantly
 
     # --- Prediction Data ---
     # Define the range for prediction (can be wider than training if desired, but expect extrapolation issues)
