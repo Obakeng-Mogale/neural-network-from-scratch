@@ -1,14 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
+# If you have Neuralnetwork.py, you'd typically import it like:
+# import Neuralnetwork as nn
 
-# --- Neural Network Core Classes ---
+# --- Neural Network Core Classes (full code for context) ---
 
 """layer_dense class"""
 class Layer_Dense:
     def __init__(self, n_inputs, n_neurons):
-        # He (Kaiming) Initialization for ReLU
         self.weights = np.random.randn(n_inputs, n_neurons) * np.sqrt(2 / n_inputs)
-        self.biases = np.zeros((1, n_neurons)) # Biases typically start at 0
+        self.biases = np.zeros((1, n_neurons))
 
     def forward(self, X):
         self.inputs = X
@@ -16,15 +17,12 @@ class Layer_Dense:
         return self.output
 
     def backward(self, dvalues):
-        # Gradients on parameters
         self.dweights = np.dot(self.inputs.T, dvalues)
         self.dbiases = np.sum(dvalues, axis=0, keepdims=True)
-        # Gradient on values for the previous layer
         self.dinputs = np.dot(dvalues, self.weights.T)
         return self.dinputs
 
     def normalization(self):
-        """to implement - currently not used"""
         pass
 
 """Loss classes"""
@@ -35,27 +33,23 @@ class Loss:
         return self.data_loss
 
 class loss_mse(Loss):
-    """Mean Squared Error Loss"""
     def forward(self, y_pred, y_true):
         self.diff = (y_pred - y_true)
         self.output = self.diff**2
         return self.output
 
-    def backward(self, dvalues=None, y_true=None): # dvalues/y_true parameters are placeholders for clarity
-                                                 # as this specific backward uses self.diff directly
-        # Gradient of MSE with respect to y_pred
+    def backward(self, dvalues=None, y_true=None):
         self.dinputs = 2 * self.diff / np.size(self.output)
         return self.dinputs
 
 class loss_CategoricalCrossEntropy(Loss):
-    """Categorical Cross-Entropy Loss"""
     def forward(self, y_pred, y_true):
         samples = len(y_pred)
         y_clipped = np.clip(y_pred, 1e-7, 1 - 1e-7)
 
-        if len(y_true.shape) == 1: # Sparse labels (integers)
+        if len(y_true.shape) == 1:
             correct_conf = y_clipped[range(samples), y_true]
-        elif len(y_true.shape) == 2: # One-hot encoded labels
+        elif len(y_true.shape) == 2:
             correct_conf = np.sum(y_clipped * y_true, axis=1)
         
         self.output = -np.log(correct_conf)
@@ -81,7 +75,7 @@ class Activation_ReLU:
 
     def backward(self, dvalues):
         self.dinputs = dvalues.copy()
-        self.dinputs[self.inputs <= 0] = 0 # Zero gradient where input values were negative
+        self.dinputs[self.inputs <= 0] = 0
         return self.dinputs
  
 class Activation_Softmax:
@@ -92,37 +86,30 @@ class Activation_Softmax:
         return self.output
 
     def backward(self, dvalues):
-        # This standalone Softmax backward is typically not used directly
-        # when combined with CCE Loss for numerical stability.
-        # Its implementation would be complex and context-dependent.
-        # For simplicity, we return self if it's not the combined loss.
-        return self
+        return self # Not typically used alone for backward in a classification context
 
 class Activation_SoftMax_crosscategorical_loss(Loss):
-    """Combined Softmax activation and Categorical Cross-Entropy loss for stability."""
     def __init__(self):
         self.activation = Activation_Softmax()
         self.loss = loss_CategoricalCrossEntropy()
 
     def forward(self, inputs, y_true):
         self.activation.forward(inputs)
-        self.output = self.activation.output # Store softmax output for potential use or logging
+        self.output = self.activation.output
         return self.loss.calculate(self.output, y_true)
 
     def backward(self, dvalues, y_true):
         samples = len(dvalues)
-
         if len(y_true.shape) == 2:
             y_true = np.argmax(y_true, axis=1)
 
         self.dinputs = dvalues.copy()
-        self.dinputs[range(samples), y_true] -= 1 # Combined gradient for Softmax+CCE
+        self.dinputs[range(samples), y_true] -= 1
         self.dinputs = self.dinputs / samples
-        return self.dinputs # Crucial: Must return the gradient
+        return self.dinputs
 
 """Optimizers"""
 class optimizer_SGD:
-    """SGD Optimizer with learning rate decay and momentum."""
     def __init__(self, learning_rate=1.0, decay=0.0, momentum=0.9):
         self.learning_rate = learning_rate
         self.current_learning_rate = learning_rate
@@ -155,49 +142,89 @@ class optimizer_SGD:
     def post_update(self):
         self.iterations += 1
 
+class optimizer_Adam:
+    def __init__(self, learning_rate=0.001, decay=0.0, epsilon=1e-7, beta1=0.9, beta2=0.999):
+        self.learning_rate = learning_rate
+        self.current_learning_rate = learning_rate
+        self.decay = decay
+        self.iterations = 0
+        self.epsilon = epsilon
+        self.beta1 = beta1
+        self.beta2 = beta2
+
+    def pre_update(self):
+        if self.decay:
+            self.current_learning_rate = self.learning_rate / (1 + self.decay * self.iterations)
+
+    def update(self, layer):
+        if not hasattr(layer, 'weight_cache'):
+            layer.weight_momentums = np.zeros_like(layer.weights)
+            layer.weight_cache = np.zeros_like(layer.weights)
+            layer.bias_momentums = np.zeros_like(layer.biases)
+            layer.bias_cache = np.zeros_like(layer.biases)
+
+        layer.weight_momentums = self.beta1 * layer.weight_momentums + (1 - self.beta1) * layer.dweights
+        layer.bias_momentums = self.beta1 * layer.bias_momentums + (1 - self.beta1) * layer.dbiases
+
+        weight_momentums_corrected = layer.weight_momentums / (1 - self.beta1**(self.iterations + 1))
+        bias_momentums_corrected = layer.bias_momentums / (1 - self.beta1**(self.iterations + 1))
+
+        layer.weight_cache = self.beta2 * layer.weight_cache + (1 - self.beta2) * layer.dweights**2
+        layer.bias_cache = self.beta2 * layer.bias_cache + (1 - self.beta2) * layer.dbiases**2
+
+        weight_cache_corrected = layer.weight_cache / (1 - self.beta2**(self.iterations + 1))
+        bias_cache_corrected = layer.bias_cache / (1 - self.beta2**(self.iterations + 1))
+
+        layer.weights += -self.current_learning_rate * weight_momentums_corrected / \
+                         (np.sqrt(weight_cache_corrected) + self.epsilon)
+
+        layer.biases += -self.current_learning_rate * bias_momentums_corrected / \
+                        (np.sqrt(bias_cache_corrected) + self.epsilon)
+
+    def post_update(self):
+        self.iterations += 1
+
 """Sequential Model Class"""
 class Sequential:
     optimizers = {
         'sgd': optimizer_SGD,
+        'adam': optimizer_Adam,
     }
     loss_func = {
         'mse': loss_mse,
         'cce': loss_CategoricalCrossEntropy,
-        'softmax_cce': Activation_SoftMax_crosscategorical_loss # For convenience
+        'softmax_cce': Activation_SoftMax_crosscategorical_loss
     }
 
     def __init__(self, layers: list):
         self.layers = layers
         self.loss = None
         self.optimizer = None
-        self.metrics = None # Not implemented for metrics calculation yet, but compiled for.
+        self.metrics = None # `metrics` is a list, currently used for nothing.
 
     def compile_net(self, optimizer, loss, metrics: list = None, learning_rate=1.0):
-        if loss == 'softmax_cce': # Use the combined loss for softmax + cce
+        if loss == 'softmax_cce':
             self.loss = self.loss_func['softmax_cce']()
         else:
             self.loss = self.loss_func[loss]()
 
         self.optimizer = self.optimizers[optimizer](learning_rate=learning_rate)
-        self.metrics = metrics
+        self.metrics = metrics # Placeholder, not actively used in training loop yet
 
     def fit(self, input_data, output_data, epochs=5, batch_size=-1, shuffle_batch=False):
         if self.loss is None or self.optimizer is None:
             raise RuntimeError("Model must be compiled before calling fit().")
 
         num_samples = input_data.shape[0]
-        
-        # Determine effective batch size for num_batches calculation
         effective_batch_size = num_samples if batch_size == -1 else batch_size
-        num_batches_per_epoch = (num_samples + effective_batch_size - 1) // effective_batch_size
         
         print(f"Starting training for {epochs} epochs with batch size {effective_batch_size}")
 
         for epoch in range(epochs):
-            self.loss_avg = 0.0 # Reset average loss for the current epoch
-            batch_count_this_epoch = 0
-
-            # Create a new generator for batches for each epoch.
+            self.loss_avg = 0.0
+            correct_predictions_epoch = 0 # Added for accuracy
+            total_samples_epoch = 0       # Added for accuracy
+            batch_count_this_epoch = 0 
             batches_generator = self._create_batches(input_data, output_data,
                                                       batch_size=batch_size,
                                                       shuffle=shuffle_batch)
@@ -209,14 +236,37 @@ class Sequential:
                 # 2. Calculate Loss
                 batch_loss = self.loss.calculate(y_pred_batch, y_true_batch)
                 self.loss_avg += batch_loss
-                batch_count_this_epoch += 1
+                
+                batch_count_this_epoch+=1
+                # 3. Calculate Training Accuracy for the batch (if applicable)
+                # This logic assumes classification problems where y_pred_batch are probabilities/logits
+                # and y_true_batch are one-hot or sparse labels.
+                if hasattr(self.loss, 'activation') and isinstance(self.loss.activation, Activation_Softmax):
+                    # For classification, we use argmax on the predictions
+                    predicted_classes = np.argmax(y_pred_batch, axis=1)
+                    
+                    # Convert true labels to sparse if they are one-hot encoded
+                    if len(y_true_batch.shape) == 2:
+                        true_classes = np.argmax(y_true_batch, axis=1)
+                    else:
+                        true_classes = y_true_batch # Assume sparse if not 2D
 
-                # 3. Backward Pass & Optimizer Update
-                self._backward(y_true_batch) # y_true_batch is needed by loss.backward
+                    correct_predictions_batch = np.sum(predicted_classes == true_classes)
+                    correct_predictions_epoch += correct_predictions_batch
+                    total_samples_epoch += len(X_batch)
 
+                # 4. Backward Pass & Optimizer Update
+                self._backward(y_true_batch)
+            
             # Print epoch summary
-            if batch_count_this_epoch > 0:
-                print(f"Epoch {epoch + 1}/{epochs} - Avg Loss: {self.loss_avg / batch_count_this_epoch:.6f}")
+            if batch_count_this_epoch > 0: # Check if any batches were processed
+                epoch_loss_avg = self.loss_avg / batch_count_this_epoch
+                log_string = f"Epoch {epoch + 1}/{epochs} - Avg Loss: {epoch_loss_avg:.6f}"
+                
+                if total_samples_epoch > 0: # Only add accuracy if it was calculated
+                    epoch_accuracy = correct_predictions_epoch / total_samples_epoch
+                    log_string += f", Train Accuracy: {epoch_accuracy:.4f}"
+                print(log_string)
             else:
                 print(f"Epoch {epoch + 1}/{epochs} - No batches processed (check input data/batch size).")
 
@@ -225,14 +275,26 @@ class Sequential:
     def evaluate(self, input_data, output_data):
         y_pred = self._forward(input_data)
         final_loss = self.loss.calculate(y_pred, output_data)
-        print(f"Evaluation Loss: {final_loss:.6f}")
-        return final_loss
+        
+        # Also calculate accuracy for evaluation if applicable
+        accuracy = 0.0
+        if hasattr(self.loss, 'activation') and isinstance(self.loss.activation, Activation_Softmax):
+            predicted_classes = np.argmax(y_pred, axis=1)
+            if len(output_data.shape) == 2:
+                true_classes = np.argmax(output_data, axis=1)
+            else:
+                true_classes = output_data
+            accuracy = np.mean(predicted_classes == true_classes)
+            print(f"Evaluation Loss: {final_loss:.6f}, Evaluation Accuracy: {accuracy:.4f}")
+        else:
+            print(f"Evaluation Loss: {final_loss:.6f}")
+        return final_loss, accuracy # Return both for potential use
 
     def predict(self, input_data):
         return self._forward(input_data)
     
-    def get_loss(self, input_data, output_data): # Legacy/helper, prefer evaluate
-        print("Use .evaluate(input_data, output_data) for model loss calculation.")
+    def get_loss(self, input_data, output_data):
+        print("Use .evaluate(input_data, output_data) for model loss calculation and metrics.")
         return self.evaluate(input_data, output_data)
 
     def _forward(self, input_data):
@@ -242,47 +304,33 @@ class Sequential:
         return current_output
 
     def _backward(self, y_true_batch):
-        # Start the backward pass from the loss function.
-        # The loss function's backward method must compute self.dinputs.
-        self.loss.backward(self.loss.output, y_true_batch) # Pass `dvalues` and `y_true` as expected by loss.backward
-
+        self.loss.backward(self.loss.output, y_true_batch)
         self.optimizer.pre_update()
-
-        current_dvalues = self.loss.dinputs # Get the gradient from the loss w.r.t. the network's final output
+        current_dvalues = self.loss.dinputs
 
         for layer in reversed(self.layers):
-            layer.backward(current_dvalues) # Pass the current gradients to the layer's backward
-            current_dvalues = layer.dinputs # Update gradients for the next layer in the chain
-
+            layer.backward(current_dvalues)
+            current_dvalues = layer.dinputs
             if hasattr(layer, 'weights'):
                 self.optimizer.update(layer)
-
         self.optimizer.post_update()
 
     def _create_batches(self, input_data, output_data, batch_size=1, shuffle=False):
-        """
-        Divides the rows of NumPy arrays into batches. This is a generator function.
-        """
         num_samples = input_data.shape[0]
-
         if num_samples != output_data.shape[0]:
             raise ValueError("input_data and output_data must have the same number of samples.")
         if not isinstance(batch_size, int) or (batch_size <= 0 and batch_size != -1):
             raise ValueError("batch_size must be a positive integer or -1.")
-
         if batch_size == -1:
             batch_size = num_samples
-
         indices = np.arange(num_samples)
         if shuffle:
             np.random.shuffle(indices)
-
         for i in range(0, num_samples, batch_size):
             batch_indices = indices[i:i + batch_size]
             x_batch = input_data[batch_indices]
             y_batch = output_data[batch_indices]
             yield x_batch, y_batch
-
 
 # --- Main Execution / Training Script ---
 
@@ -312,7 +360,7 @@ if __name__ == "__main__":
 
     # Model Compilation
     model.compile_net(
-        optimizer="sgd",
+        optimizer="adam",
         loss='mse',
         learning_rate=0.001 # Start with a good learning rate. You might fine-tune this.
     )
